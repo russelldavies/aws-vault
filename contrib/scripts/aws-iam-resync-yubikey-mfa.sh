@@ -1,8 +1,13 @@
 #!/bin/sh
-# Resync a Yubikey TOTP device to IAM using your IAM User as the $MFA_DEVICE_NAME
-# Currently, aws iam resync-mfa-device doesn't support specifying your MFA Device Name.
+# Resync a Yubikey TOTP device to IAM user
+# By default the device name is set to "YubiKey-<serial number>" but can be
+# overridden with the $MFA_DEVICE_NAME environment variable.
 
 set -eu
+
+if [ -z "${MFA_DEVICE_NAME:-}" ]; then
+  MFA_DEVICE_NAME="YubiKey-$(ykman list --serials | tr -d '\n')"
+fi
 
 ACCOUNT_ARN=$(aws sts get-caller-identity --query Arn --output text)
 
@@ -11,7 +16,7 @@ ACCOUNT_ARN=$(aws sts get-caller-identity --query Arn --output text)
 USERNAME=$(echo "$ACCOUNT_ARN" | rev | cut -d/ -f1 | rev)
 
 ACCOUNT_ID=$(echo "$ACCOUNT_ARN" | cut -d: -f5)
-SERIAL_NUMBER="arn:aws:iam::${ACCOUNT_ID}:mfa/${USERNAME}"
+SERIAL_NUMBER="arn:aws:iam::${ACCOUNT_ID}:mfa/${MFA_DEVICE_NAME}"
 
 CODE1=$(ykman oath accounts code -s "$SERIAL_NUMBER")
 

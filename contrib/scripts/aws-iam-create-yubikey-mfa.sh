@@ -1,6 +1,7 @@
 #!/bin/sh
-# Adds a Yubikey TOTP device to IAM using your IAM User as the $MFA_DEVICE_NAME
-# Currently, aws iam enable-mfa-device doesn't support specifying your MFA Device Name.
+# Adds a Yubikey TOTP device to IAM user.
+# By default the device name is set to "YubiKey-<serial number>" but can be
+# overridden with the $MFA_DEVICE_NAME environment variable.
 
 set -eu
 
@@ -8,6 +9,11 @@ if [ -n "${AWS_SESSION_TOKEN:-}" ]; then
   echo "aws-vault must be run without a STS session, please run it with the --no-session flag" >&2
   exit 1
 fi
+
+if [ -z "${MFA_DEVICE_NAME:-}" ]; then
+  MFA_DEVICE_NAME=YubiKey-$(ykman list --serials | tr -d '\n')
+fi
+
 
 ACCOUNT_ARN=$(aws sts get-caller-identity --query Arn --output text)
 
@@ -19,7 +25,7 @@ OUTFILE=$(mktemp)
 trap 'rm -f "$OUTFILE"' EXIT
 
 SERIAL_NUMBER=$(aws iam create-virtual-mfa-device \
-  --virtual-mfa-device-name "$USERNAME" \
+  --virtual-mfa-device-name "$MFA_DEVICE_NAME" \
   --bootstrap-method Base32StringSeed \
   --outfile "$OUTFILE" \
   --query VirtualMFADevice.SerialNumber \
@@ -40,3 +46,6 @@ aws iam enable-mfa-device \
   --serial-number "$SERIAL_NUMBER" \
   --authentication-code1 "$CODE1" \
   --authentication-code2 "$CODE2"
+
+echo "mfa_serial = $SERIAL_NUMBER"
+echo "mfa_process = ykman oath accounts code --single $SERIAL_NUMBER"
